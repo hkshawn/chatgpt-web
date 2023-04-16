@@ -1,0 +1,244 @@
+<!DOCTYPE html>
+<html lang="en">
+	<head>
+		<meta charset="UTF-8">
+		<meta http-equiv="X-UA-Compatible" content="IE=edge">
+		<meta name="viewport" content="width=device-width, initial-scale=1.0">
+		<title>Simple Chat Application</title>
+		<link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Poppins&display=swap">
+		<style>
+			* {
+				margin: 0;
+				padding: 0;
+				box-sizing: border-box;
+				font-family: 'Poppins', sans-serif;
+			}
+
+			body {
+				background-color: #F8F8F8;
+				display: flex;
+				justify-content: center;
+				align-items: center;
+				height: 100vh;
+				flex-direction: column;
+			}
+
+			h1 {
+				font-size: 3rem;
+				margin-bottom: 10px;
+				color: #333;
+			}
+
+			#chat-container {
+				width: 100%;
+				max-width: 800px;
+				display: flex;
+				flex-direction: column;
+				border-radius: 10px;
+				overflow: hidden;
+				box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+			}
+
+			#messages {
+				padding: 20px;
+				background-color: #fff;
+				height: 600px;
+				overflow-y: auto;
+			}
+
+			#chat-form {
+				display: flex;
+				background-color: #333;
+				padding: 20px;
+			}
+
+			#user-input {
+				flex: 1;
+				padding: 10px;
+				border: none;
+				border-radius: 5px;
+				outline: none;
+				font-size: 1rem;
+				background-color: #fff;
+				color: #333;
+			}
+
+			#send-button {
+				padding: 10px 20px;
+				margin-left: 10px;
+				background-color: #007BFF;
+				border: none;
+				border-radius: 5px;
+				color: white;
+				font-size: 1rem;
+				cursor: pointer;
+			}
+
+			.chat-message {
+				display: flex;
+				flex-direction: column;
+				margin-bottom: 15px;
+			}
+
+			.chat-message span {
+				max-width: 60%;
+				padding: 10px;
+				border-radius: 10px;
+				word-wrap: break-word;
+				line-height: 1.4;
+			}
+
+			.user-message {
+				flex-direction: row-reverse;
+			}
+
+			.assistant-message {
+				flex-direction: row;
+			}
+
+			.user-message span {
+				background-color: #007BFF;
+				color: white;
+				align-self: flex-end;
+			}
+
+			.assistant-message span {
+				background-color: #F8F8F8;
+				color: #333;
+				align-self: flex-start;
+				border: 1px solid #ccc;
+			}
+
+			.message-time {
+				font-size: 0.8rem;
+				color: #777;
+				margin-top: 5px;
+			}
+
+			.user-message .message-time {
+				align-self: flex-end;
+			}
+
+			.assistant-message .message-time {
+				align-self: flex-start;
+			}
+		</style>
+	</head>
+	<body>
+		<h1>Simple Chat Application</h1>
+		<div id="chat-container">
+			<div id="messages"></div>
+			<form id="chat-form">
+				<input type="text" id="user-input" placeholder="输入你的问题..." required>
+				<button id="send-button" type="submit" disabled>发送</button>
+			</form>
+		</div>
+
+		<script>
+			const chatForm = document.getElementById('chat-form');
+						const messages = document.getElementById('messages');
+						const userInput = document.getElementById('user-input');
+						const sendButton = document.getElementById('send-button');
+
+						const typeMessage = async (element, content) => {
+							let displayedText = '';
+							for (const char of content) {
+								displayedText += char;
+								element.textContent = displayedText;
+								await new Promise((resolve) => setTimeout(resolve, 30));
+							}
+						};
+
+						const appendMessage = async (role, content) => {
+							const messageWrapper = document.createElement('div');
+							messageWrapper.classList.add('chat-message');
+							messageWrapper.classList.add(role === 'user' ? 'user-message' : 'assistant-message');
+
+							const message = document.createElement('span');
+							messageWrapper.appendChild(message);
+
+							const messageTime = document.createElement('div');
+							messageTime.classList.add('message-time');
+							messageTime.textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+							messageWrapper.appendChild(messageTime);
+
+							messages.appendChild(messageWrapper);
+							messages.scrollTop = messages.scrollHeight;
+
+							if (role === 'user') {
+								message.textContent = content;
+							} else {
+								sendButton.disabled = true; // Disable the send button when the assistant starts typing
+								await typeMessage(message, content);
+								sendButton.disabled = false; // Enable the send button when the assistant finishes typing
+							}
+						};
+
+						let clickCounter = 0;
+
+						const handleClickLimit = () => {
+							clickCounter++;
+							if (clickCounter > 5) {
+								alert("每分钟不能发送超过5次，请稍后再试！");
+								return false;
+							}
+							setTimeout(() => {
+								clickCounter--;
+							}, 60000);
+							return true;
+						};
+
+						userInput.addEventListener('input', () => {
+							if (userInput.value.trim() === '') {
+								sendButton.disabled = true;
+							} else {
+								sendButton.disabled = false;
+							}
+						});
+
+						let sessionId = null;
+
+			chatForm.addEventListener('submit', async (e) => {
+				e.preventDefault();
+				if (!handleClickLimit()) return;
+
+				const userMessage = userInput.value.trim();
+				if (!userMessage) return;
+				sendButton.disabled = true;
+				appendMessage('user', userMessage);
+				userInput.value = '';
+
+				const chatReq = {
+					messages: [
+						{
+							role: 'user',
+							content: userMessage
+						}
+					]
+				};
+				const headers = {
+					'Content-Type': 'application/json'
+				};
+				if (sessionId) {
+					headers['X-Session-ID'] = sessionId;
+				}
+				const response = await fetch('/chat', {
+					method: 'POST',
+					headers: headers,
+					body: JSON.stringify(chatReq)
+				});
+
+				if (response.ok) {
+					if (!sessionId) {
+						sessionId = response.headers.get('X-Session-ID');
+					}
+					const chatRes = await response.json();
+					const assistantMessage = chatRes.choices[0].message.content;
+					appendMessage('assistant', assistantMessage);
+				} else {
+					appendMessage('assistant', 'Error: Could not get a response from the server.');
+				}
+			});
+		</script>
+	</body>
+</html>
